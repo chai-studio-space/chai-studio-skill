@@ -37,8 +37,8 @@ Create `chai-studio.json` in the project root. This file tells the skill which C
 ## Setup Workflow
 
 1. Call `get-applications`.
-2. If one application clearly matches the project, use it.
-3. If several plausible apps exist, ask the user which one to configure.
+2. Ask the user which application to configure for this project.
+3. Use only the user-selected application.
 4. Write `chai-studio.json`.
 5. Call `get-presets` and `get-rulesets` to verify `presetId` and `auditRuleSetId`.
 6. Create or update `DESIGN.md` and `DESIGN-RULES.md`.

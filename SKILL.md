@@ -15,7 +15,7 @@ Use this skill to make Chai Studio the source of truth for project design contex
 ## First Move
 
 1. Look for `chai-studio.json` at the project root.
-2. If it is missing, call `mcp__chai_studio__.get-applications`, let the user choose only if there is no obvious target, then create `chai-studio.json`.
+2. If it is missing, call `mcp__chai_studio__.get-applications`, ask the user to choose which application to configure, then create `chai-studio.json` from that selection.
 3. Read the configured application, preset, and audit ruleset before editing UI or running audits.
 4. Keep `DESIGN.md` and `DESIGN-RULES.md` in sync with the Chai Studio preset, ruleset, and project guidance.
 

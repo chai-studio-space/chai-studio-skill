@@ -2,19 +2,6 @@
 
 This reference covers the operations the skill should perform after reading `chai-studio.json`.
 
-## Connection Smoke Test
-
-Use this when the user asks whether Chai Studio MCP works:
-
-1. `get-profile`
-2. `get-applications`
-3. `get-presets`
-4. `get-rulesets`
-5. `get-design-doc` for `AGENTS.md`
-6. `get_audits` for the configured `applicationId`
-
-Avoid write tools during smoke tests unless the user explicitly asks for test data.
-
 ## Sync Local Design Docs
 
 1. Read `chai-studio.json`.
