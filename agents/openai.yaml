@@ -1,0 +1,12 @@
+interface:
+  display_name: "Chai Studio MCP"
+  short_description: "Sync Chai Studio design rules and audits"
+  brand_color: "#B8422E"
+  default_prompt: "Use $chai-studio-skill to configure this project with Chai Studio and sync local design rules."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "chai_studio"
+      description: "Chai Studio MCP server for applications, presets, rulesets, design docs, audits, and violations."
+policy:
+  allow_implicit_invocation: true
