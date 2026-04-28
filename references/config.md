@@ -1,154 +1,70 @@
 # Chai Studio Project Config
 
-Create `chai-studio.json` in the project root. This file tells the skill which Chai Studio application, preset, and ruleset to use by default.
+Create `chai-studio.yaml` in the project root. This local file tells the skill which Chai Studio application, preset, and rulesets to use by default. Add `chai-studio.yaml` to the project `.gitignore`.
 
-## Minimal Schema
+`design-studio.yaml` is the synced application contract. It is generated from `get_application_yaml`, includes `lastUpdated`, and contains application details, the full linked preset, and all linked rulesets. It is not supposed to be manually edited; update it through `get_application_yaml` or the approved `sync_application_yaml` flow. It must be Chai Studio database agnostic: no `application.id`, `preset.id`, `rulesets[].id`, `createdAt`, `updatedAt`, or similar Chai Studio DB fields.
 
-```json
-{
-  "$schema": "./chai-studio.schema.json",
-  "applicationId": "d7f3c8cd-4288-4f21-9a42-386711866539",
-  "applicationName": "Customer Portal",
-  "presetId": "heritage-seed",
-  "auditRuleSetId": "ruleset-default-craft",
-  "designDocFiles": {
-    "design": "DESIGN.md",
-    "rules": "DESIGN-RULES.md"
-  },
-  "sync": {
-    "source": "chai-studio",
-    "lastSyncedAt": "2026-04-28T00:00:00.000Z"
-  }
-}
+## Minimal `chai-studio.yaml`
+
+```yaml
+applicationId: d7f3c8cd-4288-4f21-9a42-386711866539
+applicationName: Customer Portal
+presetId: heritage-seed
+auditRuleSetIds:
+  - ruleset-default-craft
+sync:
+  source: chai-studio
+  file: design-studio.yaml
+  lastApplicationYamlUpdatedAt: "2026-04-28T00:00:00.000Z"
 ```
 
-## Recommended Fields
+## Required Fields
 
 - `applicationId`: required. Use `get-applications`; never invent this.
 - `applicationName`: optional but helpful for humans.
-- `presetId`: required for design sync. Usually present on the application record.
-- `auditRuleSetId`: required for audit upload. Choose from the application's `auditRuleSetIds` list returned by `get-applications`, then verify details via `get-rulesets`.
-- `designDocFiles.design`: local design documentation path. Default: `DESIGN.md`.
-- `designDocFiles.rules`: local audit rules documentation path. Default: `DESIGN-RULES.md`.
-- `sync.source`: usually `chai-studio`.
-- `sync.lastSyncedAt`: update after meaningful doc sync.
-- `metadata`: optional object for repo, branch, team, or environment notes.
+- `presetId`: required for design sync. Usually present on the application record or returned by `get_application_yaml`.
+- `auditRuleSetIds`: required for audit upload. Choose from the application's `auditRuleSetIds`, then verify details via `get-rulesets({ applicationId })`.
+- `sync.file`: must be `design-studio.yaml`.
+- `sync.lastApplicationYamlUpdatedAt`: copy from `get_application_yaml.lastUpdated` or returned sync/create output.
+
+## `design-studio.yaml` Shape
+
+```yaml
+schemaVersion: "1.0"
+lastUpdated: "2026-04-28T00:00:00.000Z"
+application:
+  name: Customer Portal
+  description: Customer-facing dashboard
+  websiteUrl: https://example.com
+  iconUrl: null
+preset:
+  name: Heritage Seed
+  # full preset fields continue here
+rulesets:
+  - name: Default Craft Rules
+    description: Core UI quality checks
+    citationUrl: https://app.chaistudio.space
+    rules:
+      - id: rule-id
+        title: Rule title
+        severity: high
+        category: visual
+        guidance: Rule guidance
+```
 
 ## Setup Workflow
 
-1. Call `get-applications`.
-2. Ask the user which application to configure for this project.
-3. Use only the user-selected application.
-4. Write `chai-studio.json`.
-5. Call `get-presets` and `get-rulesets` to verify `presetId` and `auditRuleSetId`.
-6. Create or update `DESIGN.md` and `DESIGN-RULES.md`.
+1. Ensure `chai-studio.yaml` is listed in `.gitignore`.
+2. If `chai-studio.yaml` exists, read it, call `get_application_yaml(applicationId)`, then run timestamp sync.
+3. If `chai-studio.yaml` is missing but `design-studio.yaml` exists, parse it and call `get-applications`.
+4. Match by exact `application.name`.
+5. If matched, create `chai-studio.yaml`, then run timestamp sync.
+6. If not matched, ask for explicit user approval. After approval, call `create_application_from_yaml({ content, approved: true })`, write returned `design-studio.yaml`, then create `chai-studio.yaml`.
+7. If neither file exists, call `get-applications`, ask the user to choose an application, create `chai-studio.yaml`, call `get_application_yaml`, and write `design-studio.yaml`.
 
-## Optional JSON Schema
+## Sync Workflow
 
-If the project benefits from editor validation, create `chai-studio.schema.json`:
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Chai Studio Project Config",
-  "type": "object",
-  "required": ["applicationId", "presetId", "auditRuleSetId"],
-  "properties": {
-    "$schema": { "type": "string" },
-    "applicationId": { "type": "string", "minLength": 1 },
-    "applicationName": { "type": "string" },
-    "presetId": { "type": "string", "minLength": 1 },
-    "auditRuleSetId": { "type": "string", "minLength": 1 },
-    "designDocFiles": {
-      "type": "object",
-      "properties": {
-        "design": { "type": "string" },
-        "rules": { "type": "string" }
-      },
-      "additionalProperties": false
-    },
-    "sync": {
-      "type": "object",
-      "properties": {
-        "source": { "type": "string" },
-        "lastSyncedAt": { "type": "string" }
-      },
-      "additionalProperties": true
-    },
-    "metadata": { "type": "object" }
-  },
-  "additionalProperties": false
-}
-```
-
-## DESIGN.md Outline
-
-Use concise sections:
-
-```markdown
-# Design System
-
-## Product Context
-
-- Target audience:
-- Primary use case:
-- Brand personality:
-
-## Chai Studio Source
-
-- Application:
-- Preset:
-- Last synced:
-
-## Tokens
-
-### Color
-
-### Typography
-
-### Spacing, Radius, Shadow
-
-## Components
-
-## Accessibility
-
-## Motion and Performance
-
-## Responsive Behavior
-```
-
-## DESIGN-RULES.md Outline
-
-Use rule IDs so audit payloads map back to Chai Studio:
-
-```markdown
-# Design Audit Rules
-
-## Chai Studio Source
-
-- Application:
-- Ruleset:
-- Last synced:
-
-## Severity Order
-
-1. Critical
-2. High
-3. Medium
-4. Low
-
-## Rules
-
-### rule-id
-
-- Title:
-- Category:
-- Severity:
-- Guidance:
-- What to flag:
-- Preferred fix:
-
-## Reporting Format
-
-For every violation, include file, line/snippet, why it matters, and a concrete fix.
-```
+1. Call `get_application_yaml(applicationId)` and compare its `lastUpdated` with local `design-studio.yaml.lastUpdated`.
+2. If MCP is newer, replace local `design-studio.yaml` with MCP content.
+3. If local is newer, call `sync_application_yaml({ applicationId, content, approved: false })`, show the diff, ask for approval, then call with `approved: true`.
+4. After any create/sync/fetch, update `chai-studio.yaml.sync.lastApplicationYamlUpdatedAt`.
