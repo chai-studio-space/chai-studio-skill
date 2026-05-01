@@ -1,70 +1,75 @@
-# Chai Studio Project Config
+# Chai Studio Skill Configuration
 
-Create `chai-studio.yaml` in the project root. This local file tells the skill which Chai Studio application, preset, and rulesets to use by default. Add `chai-studio.yaml` to the project `.gitignore`.
+## Required MCP Dependencies
 
-`design-studio.yaml` is the synced application contract. It is generated from `get_application_yaml`, includes `lastUpdated`, and contains application details, the full linked preset, and all linked rulesets. It is not supposed to be manually edited; update it through `get_application_yaml` or the approved `sync_application_yaml` flow. It must be Chai Studio database agnostic: no `application.id`, `preset.id`, `rulesets[].id`, `createdAt`, `updatedAt`, or similar Chai Studio DB fields.
+- Chai Studio MCP
+- Chrome DevTools MCP
 
-## Minimal `chai-studio.yaml`
+Both are required for website exploration to artifact workflows.
 
-```yaml
-applicationId: d7f3c8cd-4288-4f21-9a42-386711866539
-applicationName: Customer Portal
-presetId: heritage-seed
-auditRuleSetIds:
-  - ruleset-default-craft
-sync:
-  source: chai-studio
-  file: design-studio.yaml
-  lastApplicationYamlUpdatedAt: "2026-04-28T00:00:00.000Z"
+If Chrome DevTools MCP is unavailable, instruct user to install/enable it and pause.
+
+## Pagination Defaults
+
+List/discovery operations are paginated at 20 items per page by default.
+
+Applies to:
+
+- applications
+- presets
+- rulesets
+- rules
+
+Agents must iterate pages until target is found or pages are exhausted.
+
+## Preset Data Contract
+
+`create_preset` expects JSON representation of design YAML.
+Do not pass a raw YAML string.
+
+Suggested normalized payload shape:
+
+```json
+{
+  "name": "Preset Name",
+  "design": {
+    "tokens": {
+      "color": {},
+      "typography": {},
+      "spacing": {},
+      "radius": {},
+      "shadow": {},
+      "border": {}
+    },
+    "components": {},
+    "states": {},
+    "metadata": {
+      "sourceUrl": "https://example.com",
+      "capturedAt": "2026-05-01T00:00:00.000Z"
+    }
+  }
+}
 ```
 
-## Required Fields
+## Application Creation Contract
 
-- `applicationId`: required. Use `get-applications`; never invent this.
-- `applicationName`: optional but helpful for humans.
-- `presetId`: required for design sync. Usually present on the application record or returned by `get_application_yaml`.
-- `auditRuleSetIds`: required for audit upload. Choose from the application's `auditRuleSetIds`, then verify details via `get-rulesets({ applicationId })`.
-- `sync.file`: must be `design-studio.yaml`.
-- `sync.lastApplicationYamlUpdatedAt`: copy from `get_application_yaml.lastUpdated` or returned sync/create output.
+`create_application` requires:
 
-## `design-studio.yaml` Shape
+- `presetId`
+- `rulesetId` or `rulesetIds` (as supported by the MCP schema)
 
-```yaml
-schemaVersion: "1.0"
-lastUpdated: "2026-04-28T00:00:00.000Z"
-application:
-  name: Customer Portal
-  description: Customer-facing dashboard
-  websiteUrl: https://example.com
-  iconUrl: null
-preset:
-  name: Heritage Seed
-  # full preset fields continue here
-rulesets:
-  - name: Default Craft Rules
-    description: Core UI quality checks
-    citationUrl: https://app.chaistudio.space
-    rules:
-      - id: rule-id
-        title: Rule title
-        severity: high
-        category: visual
-        guidance: Rule guidance
-```
+Resolve IDs through paginated list discovery first.
 
-## Setup Workflow
+## Ruleset Contracts
 
-1. Ensure `chai-studio.yaml` is listed in `.gitignore`.
-2. If `chai-studio.yaml` exists, read it, call `get_application_yaml(applicationId)`, then run timestamp sync.
-3. If `chai-studio.yaml` is missing but `design-studio.yaml` exists, parse it and call `get-applications`.
-4. Match by exact `application.name`.
-5. If matched, create `chai-studio.yaml`, then run timestamp sync.
-6. If not matched, ask for explicit user approval. After approval, call `create_application_from_yaml({ content, approved: true })`, write returned `design-studio.yaml`, then create `chai-studio.yaml`.
-7. If neither file exists, call `get-applications`, ask the user to choose an application, create `chai-studio.yaml`, call `get_application_yaml`, and write `design-studio.yaml`.
+- `create_ruleset`: standalone ruleset creation flow.
+- `add_rule_to_ruleset`: attach existing rule to explicit `rulesetId`.
 
-## Sync Workflow
+## Font Fallback Policy
 
-1. Call `get_application_yaml(applicationId)` and compare its `lastUpdated` with local `design-studio.yaml.lastUpdated`.
-2. If MCP is newer, replace local `design-studio.yaml` with MCP content.
-3. If local is newer, call `sync_application_yaml({ applicationId, content, approved: false })`, show the diff, ask for approval, then call with `approved: true`.
-4. After any create/sync/fetch, update `chai-studio.yaml.sync.lastApplicationYamlUpdatedAt`.
+When extracted fonts are unavailable in Chai/platform context:
+
+1. Keep category match first.
+2. Prefer open/platform fonts with similar style metrics.
+3. Use deterministic priority ordering.
+4. Always report fallback and rationale.

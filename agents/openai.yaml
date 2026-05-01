@@ -1,12 +1,15 @@
 interface:
   display_name: "Chai Studio MCP"
-  short_description: "Redesign, audit, and sync UI with Chai Studio MCP"
+  short_description: "Explore websites with DevTools MCP and create Chai artifacts"
   brand_color: "#B8422E"
-  default_prompt: "Use $chai-studio-skill to redesign this project from live Chai Studio MCP design context, build after write changes, offer browser MCP review when available, audit the result, and update violation statuses."
+  default_prompt: "Use $chai-studio-skill to verify Chai Studio MCP + Chrome DevTools MCP availability, explore the target website, extract structured design data, and create preset/ruleset/application artifacts with exact tool names."
 dependencies:
   tools:
     - type: "mcp"
       value: "chai-studio"
-      description: "Chai Studio MCP server for applications, presets, rulesets, design docs, audits, and violations."
+      description: "Chai Studio MCP server for applications, presets, rulesets, and artifact creation."
+    - type: "mcp"
+      value: "chrome-devtools"
+      description: "Chrome DevTools MCP server for website exploration and design extraction."
 policy:
   allow_implicit_invocation: true
