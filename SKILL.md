@@ -3,7 +3,7 @@ name: chai-studio-skill
 description: Use when a project is connected to Chai Studio MCP for application-aware design system work, Chai-governed redesigns, preset/ruleset selection, UI audits, audit uploads, canvas management, journal entries, violation follow-up, or website exploration via Chrome DevTools MCP. Triggers when the user mentions Chai Studio, chai-studio.yaml, design-studio.yaml, Chai MCP, design presets, audit rulesets, redesign workflow, uploading UI audit results, syncing project design guidance with MCP, canvases, journals, or website exploration.
 license: MIT
 metadata:
-  version: 2.1.0
+  version: 2.2.0
   owner: akshayt
   short-description: Use Chai Studio MCP for design rules, audits, canvases, journals, and website exploration
 ---
@@ -11,6 +11,15 @@ metadata:
 # Chai Studio MCP
 
 Use this skill to make Chai Studio MCP the only source of truth for design context, audit rules, canvas planning, and journal documentation. Also supports Chrome DevTools MCP for evidence-driven website exploration and artifact creation.
+
+## MCP Boundary
+
+This skill is designed for agents that use the Chai Studio MCP server without access to the `chai-studio` server repository. Do not assume the agent can read, search, or modify the Chai Studio codebase.
+
+- The skill may read the user's local application codebase only when the user is asking for local code changes and the agent has filesystem access to that project.
+- Chai Studio internals are accessed only through named MCP tools and their structured outputs.
+- `canvas_runtime_read` is an MCP inspection tool for the public canvas runtime API exposed by the server. Treat it as component/API documentation returned by MCP, not general filesystem access.
+- The MCP server does not provide an arbitrary file-read tool for the Chai Studio repository. Do not ask agents to inspect `chai-studio` files directly.
 
 ## First Move
 
@@ -39,15 +48,18 @@ For non-code MCP or MCP-only design work without local filesystem access, skip t
 
 Canvas workflow is 3 steps in order:
 
-1. **DISCOVER** components by reading the canvas runtime source with `canvas_runtime_read` — this is the ultimate source of truth for exact component signatures. Use `canvas_components_list` / `canvas_components_search` for quick summaries only.
-2. **PLAN** the design — decide which `UI.*` components you will use before writing code.
+1. **DISCOVER** components and icons through MCP with `canvas_runtime_read` — this is the ultimate source of truth for exact canvas runtime component signatures exposed by the server. Use `canvas_components_list` / `canvas_components_search` for quick summaries only, and call `canvas_icons_list` / `canvas_icons_search` / `canvas_icons_get` before using `UI.CommonIcons.*` or `UI.Icons.*`.
+2. **PLAN** the design — decide which `UI.*` components, documented icons, page thumbnails, and page links you will use before writing code.
 3. **CREATE / UPDATE** pages.
 
 **Additional rules:**
 - For multi-page flows, ALWAYS use this sequence: (a) Create ALL empty pages first with `generationStatus: "started"` and empty `componentTsx`, (b) Add all page-to-page links with `canvases_pages_links_create`, (c) Generate each page one by one by updating `componentTsx` and setting `generationStatus` to `"generating"` then `"done"`. This lets the user see the full page structure and navigation immediately.
+- Every `canvases_pages_create` call MUST include a meaningful safe inline SVG thumbnail in `svg`, even for placeholders and single-page `done` creates. If an existing page lacks `svg`, the next `canvases_pages_update` must include one. Use compact inline `<svg viewBox="0 0 64 64" ...>` markup that matches the page purpose; do not include scripts, event handlers, `foreignObject`, external hrefs, images, data URLs, or javascript URLs.
 - Canvas pages must be responsive across mobile, tablet, and desktop widths.
 - All `UI.*` components are theme-aware via CSS variables. Do NOT handle light/dark manually. Use `UI.*` components directly and they adapt automatically.
 - Keep page TSX theme-neutral. Canvas theme mode controls light/dark rendering.
+- Canvas iframes do not load Tailwind. In canvas `componentTsx`, do NOT use Tailwind utility classes such as `flex`, `gap-4`, `bg-background`, `text-foreground`, or `dark:*`. Use `UI.*` components, inline styles with preset CSS variables, and base utility classes such as `.stack`, `.row`, `.grid`, `.card`, and `.container`.
+- For interactive canvas navigation, use `toCanvasPage("page-id")`, `href="toCanvasPage(page-id)"`, `href="canvas-page:page-id"`, or `href="#canvas-page:page-id"`, and also create or update the corresponding visual links with `canvases_pages_links_create` / `canvases_pages_links_update`.
 - Use `presetMappedCss` from `canvases_base_css_get` as the base CSS. Do NOT call `canvases_css_update` unless absolutely necessary — presetMappedCss already includes all required tokens and bundled components are self-contained.
 - For in-progress canvas work, provide progress updates through `generationStatus` on page create/update: `started` or `generating` while working, `done` only after completion.
 - When editing pages, use `generationStatus` `started` or `generating` during work and `done` only after the edit is complete.
@@ -165,6 +177,15 @@ Do not invent IDs. Fetch them from Chai Studio MCP.
   - **Input**: `presetId`, `preset` (JSON preset object in latest design-document shape; not YAML text)
   - **Purpose**: Updates an existing preset record.
   - **Important**: Uses the same design-document preset schema requirements as `presets_create`.
+- `presets_components_add`
+  - **Input**: `presetId`, `componentId`, `tokens`
+  - **Purpose**: Adds or replaces one component token block on an existing preset without resending the full preset. Supports light/dark mode token patches including glass/translucent effects.
+- `presets_components_update`
+  - **Input**: `presetId`, `componentId`, `tokens`
+  - **Purpose**: Patches one component token block on an existing preset without resending the full preset.
+- `presets_components_remove`
+  - **Input**: `presetId`, `componentId`
+  - **Purpose**: Removes one component token block from both light and dark maps on an existing preset.
 - `applications_yaml_create`
   - **Input**: `content`, `approved`
   - **Purpose**: Creates a new application, linked preset, and linked rulesets from valid `design-studio.yaml`. Requires explicit user approval before `approved: true`.
@@ -243,9 +264,18 @@ Do not invent IDs. Fetch them from Chai Studio MCP.
 - `canvas_components_get`
   - **Input**: `id` (component ID like 'button', 'bar-chart', 'card')
   - **Purpose**: Get full documentation for a specific canvas UI component including description, usage syntax, props, example code, and related components.
+- `canvas_icons_list`
+  - **Input**: optional `page`, `pageSize`, optional `category`
+  - **Purpose**: Lists curated Lucide icons available as `UI.CommonIcons.<Name>` and `UI.Icons.<Name>`. Call before using icons in canvas pages or preset preview examples.
+- `canvas_icons_search`
+  - **Input**: `query`, optional `page`, `pageSize`, optional `category`
+  - **Purpose**: Searches curated icon names, categories, and tags. Use returned names exactly.
+- `canvas_icons_get`
+  - **Input**: `name` (PascalCase Lucide icon name such as `Home`, `Settings`, `CreditCard`)
+  - **Purpose**: Gets icon usage and props for a documented canvas icon.
 - `canvas_runtime_read`
   - **Input**: optional `startLine`, `endLine`, optional `search`
-  - **Purpose**: Read sections of the canvas UI runtime source file (`src/lib/shadcn/components/canvas-runtime.tsx`). This is the ULTIMATE source of truth for exactly which components exist, their props, and how they are implemented.
+  - **Purpose**: Reads MCP-exposed canvas runtime API/source snippets for exactly which components exist, their props, and how they are implemented. This is not arbitrary Chai Studio repository filesystem access.
 
 ### Shadcn Development Tools (Non-Canvas)
 
@@ -296,8 +326,8 @@ The canvas design MUST reflect the exact features supported by the app. Never de
 **The agent MUST generate responsive pages without fail, always.**
 
 All canvas pages must be responsive across common viewport sizes:
-- Use Tailwind-style responsive prefixes or CSS media queries
-- Ensure layouts adapt across mobile, tablet (`md:`), and desktop (`lg:`/`xl:`)
+- Use fluid layouts, flex wrapping, percentage widths, CSS variables, and media queries when needed
+- Ensure layouts adapt across mobile, tablet, and desktop widths without Tailwind responsive prefixes
 - Test for readability and usability at 320px, 768px, and 1280px widths
 - Never deliver a page that is desktop-only or fixed-width
 
@@ -412,17 +442,18 @@ When the user asks to audit, check compliance, or find issues:
 
 When the user asks to plan, wireframe, or design a multi-page flow using Chai Studio canvases, or asks to fix canvas annotations via `/chai fix-canvas`, read `references/canvas.md` for the full protocol. Follow the REQUIRED 3-step canvas workflow:
 
-### Step 1 — DISCOVER Components
-Call `canvas_runtime_read` to inspect the actual canvas UI runtime source code (`src/lib/shadcn/components/canvas-runtime.tsx`) and understand exactly which components exist and their props. This is the ULTIMATE source of truth. For a quick summary, also call `canvas_components_list` or `canvas_components_search`.
+### Step 1 — DISCOVER Components And Icons
+Call `canvas_runtime_read` to inspect the MCP-exposed canvas runtime API/source snippets and understand exactly which canvas components exist and their props. This is the ULTIMATE source of truth for canvas authoring, but it is not general access to the Chai Studio repository. For quick summaries, also call `canvas_components_list` or `canvas_components_search`. Before using icons, call `canvas_icons_list`, `canvas_icons_search`, or `canvas_icons_get` and use returned icon names exactly.
 
 ### Step 2 — PLAN the Design
-Decide which `UI.*` components you will use and how they compose. Choose layout utilities (`.stack`, `.row`, `.grid`, `.card`, `.container`) for structure. Plan color tokens (`var(--color-bg)`, `var(--color-fg)`, etc.). Do NOT skip planning.
+Decide which `UI.*` components, documented icons, safe SVG thumbnails, and page links you will use. Choose layout utilities (`.stack`, `.row`, `.grid`, `.card`, `.container`) for structure. Plan color tokens (`var(--color-bg)`, `var(--color-fg)`, etc.). Do NOT skip planning.
 
 ### Step 3 — CREATE / UPDATE Pages
 - Create or select a canvas with `canvases_create`
 - Call `canvases_base_css_get({ canvasId })` to get `presetMappedCss` — do NOT call `canvases_css_update` unless absolutely necessary (presetMappedCss already includes all required tokens)
-- For multi-page flows: FIRST create ALL empty pages with `generationStatus: "started"`, THEN add links with `canvases_pages_links_create`, THEN generate each page's UI one by one updating `generationStatus` from `"generating"` to `"done"`
-- For single pages: create directly with `generationStatus: "done"` and full `componentTsx`
+- For multi-page flows: FIRST create ALL empty pages with `generationStatus: "started"`, empty `componentTsx`, meaningful inline `svg`, and non-overlapping `layout`, THEN add links with `canvases_pages_links_create`, THEN generate each page's UI one by one updating `generationStatus` from `"generating"` to `"done"`
+- For single pages: create directly with `generationStatus: "done"`, full `componentTsx`, meaningful inline `svg`, and non-overlapping `layout`
+- In canvas `componentTsx`, do not use imports, exports, TypeScript annotations, external libraries, real external navigation, or Tailwind utilities; use `UI.*`, documented icons, inline styles with CSS variables, and canvas base utility classes
 
 ### Additional Steps
 1. **Feature Discovery (REQUIRED if app exists)**: Granular analysis of current app features, screens, flows, data models, permissions, and business logic. Never design without full feature context.
@@ -430,9 +461,10 @@ Decide which `UI.*` components you will use and how they compose. Choose layout 
 3. **Link pages**: Call `canvases_pages_links_create` to define navigation flows.
 4. **Read open annotations first**: Call `canvases_annotations_get({ pageId, status: "open" })` before modifying existing pages.
 5. **Annotate**: Call `canvases_annotations_create` to place fix instructions.
-6. **Update page status**: Use streaming pattern — `started` → `generating` → `done`. Never set `done` while actively editing.
-7. **Reconcile annotations**: Mark fixed annotations after addressing them.
-8. **Document in design journal**: Create a design journal entry after canvas work is complete.
+6. **Maintain page thumbnails**: Include safe inline `svg` thumbnails on create, and add one during update if the page lacks one.
+7. **Update page status**: Use streaming pattern — `started` → `generating` → `done`. Never set `done` while actively editing.
+8. **Reconcile annotations**: Mark fixed annotations after addressing them.
+9. **Document in design journal**: Create a design journal entry after canvas work is complete.
 
 For `/chai fix-canvas`, this flow is constrained: list canvases, ask user to choose one canvas, read open annotations across every page in that canvas, fix all of them, and mark each annotation as `fixed`.
 
@@ -617,6 +649,8 @@ Fix workflow runs ONLY when user explicitly asks to fix, remediate, resolve, clo
 
 Before creating or updating a preset, call `fonts_list` to see all available fonts, then choose the families closest to the user's description. Only fonts returned by `fonts_list` are supported. Do not invent font names.
 
+Before creating or updating a preset or application YAML that includes preset preview/application examples with icons, call `canvas_icons_list` or `canvas_icons_search` and use documented `UI.CommonIcons.<Name>` / `UI.Icons.<Name>` icon names. Do not invent icon identifiers.
+
 When creating only a preset (without an application), always use `presets_create` instead of `applications_yaml_create`.
 
 When creating only a ruleset, always use `rulesets_create` instead of `applications_yaml_create`.
@@ -655,8 +689,18 @@ The canvas has a platform-level light/dark toggle. Generated pages MUST work wit
 - Canvas theme button controls dark mode via `html.dark` class and preset-mapped CSS variables.
 - The `<html>` element gets `class="dark"` when dark mode is active; CSS variables automatically switch via the `.dark` selector.
 - ALWAYS use CSS variables for colors (`var(--color-bg)`, `var(--color-fg)`, `var(--color-border)`) — NEVER hardcode colors.
-- Prefer semantic Tailwind classes: `bg-background`, `text-foreground`, `border-border`, `text-muted-foreground`, `bg-primary`, `text-primary-foreground`.
+- Do not use Tailwind classes in canvas `componentTsx`; the canvas iframe does not load Tailwind. Use `UI.*` components, base utility classes (`.stack`, `.row`, `.grid`, `.card`, `.container`), and inline styles with CSS variables.
 - Use canvas shared css only for specific overrides, not full theming.
+
+### SVG Thumbnail Requirement
+
+Every canvas page requires a meaningful inline SVG thumbnail in the `svg` field:
+
+- Use compact inline `<svg viewBox="0 0 64 64" ...>` markup that matches the page purpose.
+- Prefer `currentColor` or preset CSS variables for strokes/fills.
+- Do not include scripts, event handlers, `foreignObject`, external hrefs, images, data URLs, or javascript URLs.
+- Include `svg` on every `canvases_pages_create`, including placeholders and single-page `done` creates.
+- If a page exists without `svg`, include one on the next `canvases_pages_update` before continuing.
 
 ### Page Layout Positioning
 
